@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KESA</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="glow g1"></div><div class="glow g2"></div>
+<section id="auth" class="auth glass"><div class="brand"><div class="logo">K</div><div><h1>KESA</h1><small>YOUR SPACE. YOUR PEOPLE.</small></div></div>
+<p class="muted">Твоя связь — без границ.</p><div class="tabs"><button id="loginTab" class="active">Войти</button><button id="registerTab">Создать аккаунт</button></div>
+<form id="authForm"><label>Имя пользователя</label><input id="username" minlength="3" maxlength="24" autocomplete="username" required placeholder="Например, kesa_user">
+<label>Пароль</label><input id="password" type="password" minlength="6" autocomplete="current-password" required placeholder="Не менее 6 символов">
+<button class="primary wide" type="submit" id="authSubmit">Войти в KESA <span>↗</span></button></form><p id="authError" class="error"></p>
+<p class="tiny">Подключение к серверу настраивается в <b>server-config.js</b>.</p></section>
+<div id="app" class="layout hidden">
+<aside class="sidebar glass"><div class="brand compact"><div class="logo">K</div><h2>KESA</h2><span class="online-dot"></span></div>
+<div class="section-label">РАБОЧЕЕ ПРОСТРАНСТВО</div><button class="nav active" data-view="direct">◈ <span>Сообщения</span></button><button class="nav" data-view="groups">▦ <span>Группы</span></button>
+<div class="section-label row-label">ЧАТЫ <button id="newGroup" title="Создать группу">＋</button></div><div id="chatList" class="chat-list"></div>
+<div class="profile"><div class="avatar" id="myAvatar">K</div><div class="profile-info"><b id="myName">Пользователь</b><small><i class="online-dot"></i> В сети</small></div><button id="logout" title="Выйти">↪</button></div></aside>
+<main class="main glass"><header><div><div class="eyebrow" id="viewEyebrow">ЛИЧНЫЕ СООБЩЕНИЯ</div><h2 id="chatTitle">Выбери чат</h2></div><div class="header-actions"><span id="connection" class="connection">● Подключение…</span><button id="refresh" class="icon-btn" title="Обновить">↻</button></div></header>
+<div id="welcome" class="welcome"><div class="welcome-icon">✦</div><h2>Добро пожаловать в KESA</h2><p>Выбери диалог слева или начни новый.</p><div class="feature-row"><span>✧ Личные сообщения</span><span>◫ Группы</span><span>♫ Голосовые</span><span>↥ Файлы</span></div></div>
+<div id="messages" class="messages hidden"></div><div id="recording" class="recording hidden">● Идёт запись… <button id="stopRecord">Отправить</button><button id="cancelRecord">Отмена</button></div>
+<form id="composer" class="composer hidden"><label class="attach" title="Отправить файл">＋<input id="fileInput" type="file" hidden></label><textarea id="messageInput" rows="1" maxlength="4000" placeholder="Напиши сообщение…"></textarea><button type="button" id="recordBtn" class="icon-btn" title="Голосовое сообщение">♫</button><button type="submit" class="send">➤</button></form><div class="footer-note">KESA • сообщения отправляются через ваш сервер</div></main></div>
+<div id="modal" class="modal hidden"><div class="modal-card glass"><button id="closeModal" class="close">×</button><h2 id="modalTitle">Новый чат</h2><form id="modalForm"><label id="modalLabel">Имя пользователя</label><input id="modalInput" required maxlength="60" placeholder="Введите имя"><button class="primary wide">Продолжить ↗</button></form><p id="modalError" class="error"></p></div></div>
+<script src="server-config.js"></script><script src="app.js"></script></body></html>

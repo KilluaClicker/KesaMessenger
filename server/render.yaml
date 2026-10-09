@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: kesa-server
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./server/Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: kesa-data
+      mountPath: /var/data
+      sizeGB: 1
