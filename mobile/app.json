@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "KESA Messenger",
+    "slug": "kesa-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "kesa",
+    "splash": {
+      "backgroundColor": "#0B0914"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "space.kesa.messenger"
+    },
+    "android": {
+      "package": "space.kesa.messenger",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0914"
+      }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
+  }
+}
