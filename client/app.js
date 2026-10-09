@@ -14,7 +14,8 @@ let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 let currentUser = null;
-let requestInProgress = false;
+let authRequestInProgress = false;
+let authCheckInProgress = false;
 
 async function api(path, opts = {}) {
     const headers = { ...(opts.headers || {}) };
@@ -36,11 +37,11 @@ async function api(path, opts = {}) {
         });
     } catch (error) {
         throw new Error(
-            'Не удалось подключиться к серверу. Проверь интернет и доступность Render.'
+            'Не удалось подключиться к серверу. Проверь интернет.'
         );
     }
 
-    let data = {};
+    let data;
 
     try {
         data = await response.json();
@@ -49,14 +50,13 @@ async function api(path, opts = {}) {
     }
 
     if (response.status === 401) {
-        if (token && !path.startsWith('/api/auth/')) {
-            token = '';
-            localStorage.removeItem('kesa_token');
-        }
+        const isAuthRoute = path.startsWith('/api/auth/');
 
-        throw new Error(
-            data.error || 'Сессия закончилась. Войдите в аккаунт заново.'
-        );
+        if (!isAuthRoute) {
+            throw new Error(
+                data.error || 'Сессия недействительна. Войди в аккаунт заново.'
+            );
+        }
     }
 
     if (!response.ok) {
@@ -66,6 +66,25 @@ async function api(path, opts = {}) {
     }
 
     return data;
+}
+
+function saveToken(value) {
+    token = value;
+    localStorage.setItem('kesa_token', value);
+}
+
+function clearSession() {
+    token = '';
+    currentUser = null;
+    activeChat = null;
+    chats = [];
+
+    localStorage.removeItem('kesa_token');
+
+    if ($('chatList')) $('chatList').innerHTML = '';
+    if ($('messages')) $('messages').innerHTML = '';
+
+    showAuth();
 }
 
 function showAuth() {
@@ -110,11 +129,11 @@ $('registerTab').onclick = () => setMode('register');
 $('authForm').onsubmit = async event => {
     event.preventDefault();
 
-    if (requestInProgress) return;
-    requestInProgress = true;
+    if (authRequestInProgress) return;
+    authRequestInProgress = true;
 
-    $('authError').textContent = '';
     $('authSubmit').disabled = true;
+    $('authError').textContent = '';
 
     try {
         const data = await api('/api/auth/' + mode, {
@@ -126,32 +145,64 @@ $('authForm').onsubmit = async event => {
         });
 
         if (!data.token || !data.user) {
-            throw new Error('Сервер вернул неполные данные авторизации.');
+            throw new Error(
+                'Сервер не вернул токен или данные пользователя.'
+            );
         }
 
-        token = data.token;
-        localStorage.setItem('kesa_token', token);
-
+        saveToken(data.token);
         showApp(data.user);
+        $('password').value = '';
     } catch (error) {
         $('authError').textContent = error.message;
     } finally {
         $('authSubmit').disabled = false;
-        requestInProgress = false;
+        authRequestInProgress = false;
     }
 };
 
-async function loadCurrentUser() {
-    const data = await api('/api/me');
+async function restoreSession() {
+    if (authCheckInProgress) return;
+    authCheckInProgress = true;
 
-    if (!data.user) {
-        throw new Error('Сервер не вернул данные пользователя.');
+    try {
+        const savedToken = localStorage.getItem('kesa_token');
+
+        if (!savedToken) {
+            showAuth();
+            return;
+        }
+
+        token = savedToken;
+
+        const data = await api('/api/me');
+
+        if (!data.user) {
+            throw new Error('Сервер не вернул профиль пользователя.');
+        }
+
+        showApp(data.user);
+    } catch (error) {
+        // Не удаляем токен при сетевой ошибке или временной
+        // недоступности Render: попробуем восстановить сессию позже.
+        if (
+            /Сессия недействительна|Войдите в аккаунт заново|токен|авторизац/i
+                .test(error.message)
+        ) {
+            clearSession();
+        } else {
+            showAuth();
+            $('authError').textContent =
+                'Не удалось восстановить сессию. Проверь подключение и повтори попытку.';
+        }
+    } finally {
+        authCheckInProgress = false;
     }
-
-    showApp(data.user);
 }
 
 async function loadChats() {
+    if (!token || !currentUser) return;
+
     try {
         const data = await api('/api/chats');
 
@@ -163,10 +214,7 @@ async function loadChats() {
     } catch (error) {
         $('connection').textContent = '● Нет соединения';
         $('connection').style.color = '#ff8197';
-
-        if (error.message) {
-            console.error('Ошибка загрузки чатов:', error.message);
-        }
+        console.error('Ошибка загрузки чатов:', error.message);
     }
 }
 
@@ -187,7 +235,8 @@ function renderChats() {
         element.querySelector('.avatar').textContent =
             (chat.title || '?')[0].toUpperCase();
 
-        element.querySelector('b').textContent = chat.title || 'Чат';
+        element.querySelector('b').textContent =
+            chat.title || 'Чат';
 
         element.querySelector('small').textContent =
             chat.type === 'group'
@@ -219,11 +268,13 @@ async function openChat(chat) {
 }
 
 async function loadMessages() {
-    if (!activeChat) return;
+    if (!activeChat || !token) return;
 
     try {
         const data = await api(
-            '/api/chats/' + encodeURIComponent(activeChat.id) + '/messages'
+            '/api/chats/' +
+            encodeURIComponent(activeChat.id) +
+            '/messages'
         );
 
         $('messages').innerHTML = '';
@@ -298,14 +349,12 @@ async function sendMessage(content, kind = 'text', extra = {}) {
     }
 
     await api(
-        '/api/chats/' + encodeURIComponent(activeChat.id) + '/messages',
+        '/api/chats/' +
+        encodeURIComponent(activeChat.id) +
+        '/messages',
         {
             method: 'POST',
-            body: JSON.stringify({
-                content,
-                kind,
-                ...extra
-            })
+            body: JSON.stringify({ content, kind, ...extra })
         }
     );
 
@@ -315,11 +364,11 @@ async function sendMessage(content, kind = 'text', extra = {}) {
 $('composer').onsubmit = async event => {
     event.preventDefault();
 
-    const text = $('messageInput').value.trim();
-    if (!text) return;
+    const message = $('messageInput').value.trim();
+    if (!message) return;
 
     try {
-        await sendMessage(text);
+        await sendMessage(message);
         $('messageInput').value = '';
     } catch (error) {
         toast(error.message);
@@ -343,7 +392,9 @@ $('fileInput').onchange = async event => {
 
     try {
         await api(
-            '/api/chats/' + encodeURIComponent(activeChat.id) + '/upload',
+            '/api/chats/' +
+            encodeURIComponent(activeChat.id) +
+            '/upload',
             {
                 method: 'POST',
                 body: formData
@@ -378,9 +429,7 @@ $('recordBtn').onclick = async () => {
         mediaRecorder = new MediaRecorder(stream);
 
         mediaRecorder.ondataavailable = event => {
-            if (event.data.size) {
-                audioChunks.push(event.data);
-            }
+            if (event.data.size) audioChunks.push(event.data);
         };
 
         mediaRecorder.onstop = async () => {
@@ -429,9 +478,7 @@ $('recordBtn').onclick = async () => {
 function finishRecording(send) {
     if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
 
-    if (!send) {
-        isRecording = false;
-    }
+    if (!send) isRecording = false;
 
     mediaRecorder.stop();
 }
@@ -440,17 +487,7 @@ $('stopRecord').onclick = () => finishRecording(true);
 $('cancelRecord').onclick = () => finishRecording(false);
 
 $('logout').onclick = () => {
-    token = '';
-    currentUser = null;
-    activeChat = null;
-    chats = [];
-
-    localStorage.removeItem('kesa_token');
-
-    $('chatList').innerHTML = '';
-    $('messages').innerHTML = '';
-
-    showAuth();
+    clearSession();
 };
 
 $('refresh').onclick = () => {
@@ -481,8 +518,8 @@ function openModal(type) {
 
 $('newGroup').onclick = () => openModal('group');
 
-document.querySelector('[data-view="groups"]').onclick = () =>
-    openModal('group');
+document.querySelector('[data-view="groups"]').onclick =
+    () => openModal('group');
 
 document.querySelector('[data-view="direct"]').onclick = () => {
     if (activeChat) {
@@ -505,6 +542,7 @@ $('modalForm').onsubmit = async event => {
     event.preventDefault();
 
     const value = $('modalInput').value.trim();
+
     if (!value) {
         $('modalError').textContent = 'Заполни это поле.';
         return;
@@ -530,50 +568,34 @@ $('modalForm').onsubmit = async event => {
         await loadChats();
 
         const chat =
-            chats.find(item => data.chat && item.id === data.chat.id) ||
-            data.chat;
+            chats.find(item =>
+                data.chat && String(item.id) === String(data.chat.id)
+            ) || data.chat;
 
-        if (chat) {
-            await openChat(chat);
-        }
+        if (chat) await openChat(chat);
     } catch (error) {
         $('modalError').textContent = error.message;
     }
 };
 
 function toast(message) {
-    const errorElement = $('authError');
+    const element = $('authError');
 
-    if (!errorElement) {
+    if (!element) {
         console.error(message);
         return;
     }
 
-    errorElement.textContent = message;
+    element.textContent = message;
 
     setTimeout(() => {
-        if (errorElement.textContent === message) {
-            errorElement.textContent = '';
+        if (element.textContent === message) {
+            element.textContent = '';
         }
     }, 3500);
 }
 
-(async () => {
-    if (!token) {
-        showAuth();
-        return;
-    }
-
-    try {
-        await loadCurrentUser();
-    } catch (error) {
-        token = '';
-        currentUser = null;
-
-        localStorage.removeItem('kesa_token');
-        showAuth();
-    }
-})();
+restoreSession();
 
 setInterval(() => {
     if (!token || !currentUser) return;
